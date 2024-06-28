@@ -13,16 +13,24 @@
 \usepackage{subcaption}
 \usepackage{filecontents}
 \usepackage[style=verbose,backend=biber]{biblatex}
+\usepackage{relsize}
+\usepackage{xspace}
+\usepackage{booktabs}
+\usepackage{pifont}
+\usepackage{fontawesome}
+\usepackage{bbding}
+
 \addbibresource{ref.bib}
 
-
 \newcommand{\code}[1]{\texttt{{\detokenize{#1}}}}
+\newcommand{\name}{{\texorpdfstring{D{\smaller MA}A{\smaller UTH}}\xspace}\xspace}
+\newcommand{\checkcross}{\ding{51}\kern-0.65em\ding{55}}
 
 \usefonttheme{serif}
 
 \beamertemplateballitem
 
-\title{DMAAUTH: A Lightweight Pointer Integrity-based Secure Architecture to Defeat DMA Attacks}
+\title{\name: A Lightweight Pointer Integrity-based Secure Architecture to Defeat DMA Attacks}
 
 % \subtitle{Subtitle}			
 
@@ -53,13 +61,6 @@
 \end{frame}
 
 \section{Background}
-\begin{frame}{Spatial Vulnerability}
-	\begin{figure}
-		\centering
-		\includegraphics[width=0.45\linewidth]{./images/spatial.png}
-		\caption{Page-granularity protection is not enough. Perihperals can still access the memory not for DMA. \footcite{char}}
-	\end{figure}	
-\end{frame}
 
 \begin{frame}{Temporal Vulnerability}
 	\begin{figure}
@@ -69,12 +70,120 @@
 	\end{figure}
 \end{frame}
 
-\begin{frame}{Existing Mechanisms}
-	% \begin{figure}
-	% 	\centering
-	% 	\includegraphics[width=0.8\linewidth]{./images/pa.png}
-	% 	\caption{Existing mechanisms are not enough to defeat DMA attacks.}
-	% \end{figure}
+
+\begin{frame}{Spatial Vulnerability}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.52\linewidth]{./images/spatial.png}
+		\caption{Page-granularity protection is not enough. Perihperals can still access the memory not for DMA.}
+	\end{figure}	
+\end{frame}
+
+\begin{frame}{Existing Mechanism}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.9\linewidth]{./images/pa.png}
+		\caption{ARM Pointer Authentication. Sign the pointer with a key to prevent attackers from forging pointers.}
+	\end{figure}
+	But PA cannot prevent dangling pointer reusing (temporal DMA vulnerability), and doesn't support pointer arithmetic (adding offset to pointers).
+\end{frame}
+
+\section{Characterization}
+\begin{frame}{Characterization}
+	\begin{figure}
+		\centering
+		\includegraphics[width=\linewidth]{./images/char.png}
+		\caption{Pointer arithmetic is very common on DMA peripherals. This prevents us from using PA.}
+	\end{figure}
+
+\end{frame}
+
+\section{Design}
+\begin{frame}{Overview}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.6\linewidth]{./images/overview.png}
+		\caption{\name sign the DMA pointers in kernel, and authenticate them with hardware on the I/O bus. I.e. Sign with software, authenticate with hardware, forming a software-hardware co-design.}
+	\end{figure}	
+\end{frame}
+
+\begin{frame}{Partial Authentication}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.7\linewidth]{./images/apac.png}
+		\caption{The signature of the pointer is calculated with the \textit{base}, the \textit{metadata} generated at mapping time, and the encryption \textit{key}. The \textit{offset} bits are not used for pointer authentication, thus supporting pointer arithmetic.}
+	\end{figure}
+\end{frame}
+
+\begin{frame}{Partial Authentication (cont.)}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.6\linewidth]{./images/metadata.png}
+		\caption{Metadata format. The metadata is stored in a dedicated storage to authenticate the DMA transactions. The index of the metadata is the same as the signature.}
+	\end{figure}
+	\vspace{-20pt}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.6\linewidth]{./images/signing.png}
+		\caption{When the DMA reaches the I/O bus, the hardware authenticates the DMA transaction with the metadata. The metadata is located with the signature on the DMA pointer.}
+	\end{figure}
+\end{frame}
+
+\section{Implementation}
+\begin{frame}{Architecture}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.82\linewidth]{./images/implementation.png}
+		\caption{The hardware architecture of \name. The extra hardware is responsible for authenticating all the DMA transactions from PCIe bus.}
+	\end{figure}	
+\end{frame}
+
+\begin{frame}{Actual Hardware}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.58\linewidth]{./images/actual.jpg}
+		\caption{\name is implemented on a XCKU040 FPGA with PCIe Gen3 x8 support.}
+	\end{figure}
+\end{frame}
+
+\section{Evaluation}
+
+\begin{frame}{Security Evaluation}
+	\begin{table}[t!]
+	\centering
+	% \scriptsize
+	%   \caption{Security evaluation.}
+	% \vspace{-8pt}
+	\label{tab:sec}
+	\begin{tabular}{lcccccc}
+		\toprule
+		\multicolumn{2}{c}{Attack Information} & \multicolumn{3}{c}{Security Analysis}\\
+		\cmidrule(r){1-2} \cmidrule(l){3-5}
+		Attacks & Type & Bare & IOMMU & Ours\\
+		\midrule
+		\ding{182} Full Memory Dump & Arbitrary Read & \ding{55} & \ding{51} & \ding{51}\\
+		\ding{183} Denial of Service & Sub-page Write & \ding{55} & \ding{55} & \ding{51}\\
+		\ding{184} Data Pointer Tampering & Sub-page Write & \ding{55} & \ding{55} & \ding{51}\\
+		\ding{185} Control Flow Hijack & Sub-page Write & \ding{55} & \ding{55} & \ding{51}\\
+		\ding{186} Information Leak & Sub-page Read & \ding{55} & \ding{55} & \ding{51}\\
+		\ding{187} Access Unmapped & Temporal & \ding{55} & \checkcross & \ding{51}\\
+	\bottomrule
+	\vspace{-24pt}
+	\end{tabular}
+	\end{table}
+\end{frame}
+
+\begin{frame}{Performance Evaluation}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.63\linewidth]{./images/throughput.png}
+	\end{figure}	
+	\vspace{-15pt}
+	\begin{figure}
+		\centering
+		\includegraphics[width=0.63\linewidth]{./images/cputime.png}
+		\caption{\name outperforms IOMMU in terms of both throughput and CPU time.}	
+	\end{figure}
 \end{frame}
 
 % \section{Background}
